@@ -17,6 +17,7 @@ INPUT_PATH = ROOT_DIR / "data" / "processed" / "survey_profiles_clean.csv"
 
 
 def main() -> None:
+    """Importa perfiles anonimizados de encuesta a la base de datos local."""
     if not INPUT_PATH.exists():
         raise FileNotFoundError(f"No existe el CSV limpio: {INPUT_PATH}")
 
@@ -40,6 +41,7 @@ def read_rows() -> list[dict[str, str]]:
 
 
 def ensure_objectives(db) -> None:
+    """Asegura que la base tenga los objetivos que espera el recomendador."""
     existing = {name for name in db.execute(select(Objective.objective_name)).scalars().all()}
     for key, config in OBJECTIVES.items():
         if key not in existing:
@@ -48,6 +50,7 @@ def ensure_objectives(db) -> None:
 
 
 def import_row(db, row: dict[str, str]) -> None:
+    """Crea o actualiza un usuario de encuesta y su perfil principal."""
     username = row["username"]
     user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
     if not user:
@@ -76,6 +79,8 @@ def import_row(db, row: dict[str, str]) -> None:
     profile.available_minutes = 45
     profile.training_days = 3
 
+    # Se borran las condiciones previas del usuario antes de volver a cargar el
+    # CSV, para que ejecutar el script dos veces deje el mismo resultado.
     db.execute(delete(UserHealth).where(UserHealth.id_users == user.id))
     diseases = split_pipe(row.get("diseases_standardized", ""))
     medication = row.get("medication_standardized") or None

@@ -25,11 +25,14 @@ from .schemas import ActivityInput, ActivityOut, ExerciseListOut, ExerciseOut, P
 from .seed import seed_exercises, seed_objectives
 
 
+# La API sirve tanto el backend como el frontend estatico para que el MVP se
+# pueda lanzar localmente con un unico proceso.
 ROOT_DIR = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = ROOT_DIR / "frontend"
 
 
 def project_path(value: str | None, default: Path) -> Path:
+    """Permite cambiar rutas por .env sin romper las rutas relativas del repo."""
     path = Path(value) if value else default
     return path.resolve() if path.is_absolute() else (ROOT_DIR / path).resolve()
 
@@ -79,6 +82,8 @@ if (DATASET_ROOT / "videos").exists():
 
 @app.on_event("startup")
 def startup() -> None:
+    # Crea las tablas y carga objetivos/ejercicios solo si aun no existen.
+    # Esto mantiene el arranque idempotente para desarrollo y demostracion.
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_objectives(db)
@@ -152,6 +157,8 @@ def list_users(db: Session = Depends(get_db)) -> dict:
 @app.get("/api/exercise-filters")
 def exercise_filters(db: Session = Depends(get_db)) -> dict:
     def distinct_values(column) -> list[str]:
+        # Los filtros salen de los datos reales, asi no se quedan desactualizados
+        # si cambia el catalogo de ejercicios.
         return [
             value
             for value in db.execute(select(column).where(column.is_not(None)).distinct().order_by(column)).scalars().all()
@@ -194,6 +201,8 @@ def list_exercises(
             )
         )
     env_filter = (environment or "casa").strip().lower()
+    # El catalogo usa filtros mas estrictos que el recomendador para que el
+    # usuario vea claramente que ejercicios son de casa, ambos o gimnasio.
     if env_filter == "casa":
         conditions.append(Exercise.equipment.in_(HOME_CATALOG_EQUIPMENT))
     elif env_filter == "ambas":
@@ -238,6 +247,8 @@ def recommend_routine(payload: ProfileInput, db: Session = Depends(get_db)) -> R
     if not exercises:
         raise HTTPException(status_code=503, detail="No hay ejercicios cargados en la base de datos.")
 
+    # Se guarda el perfil usado para que cada recomendacion quede asociada al
+    # usuario y se pueda consultar despues en el historial.
     user = get_or_create_user(db, payload.username, payload.email)
     objective_key = resolve_objective(payload.objective)
     objective = db.execute(select(Objective).where(Objective.objective_name == objective_key)).scalar_one_or_none()
@@ -260,6 +271,8 @@ def recommend_routine(payload: ProfileInput, db: Session = Depends(get_db)) -> R
     db.add(profile)
     db.flush()
 
+    # La logica de recomendacion vive fuera de FastAPI para poder probarla y
+    # explicarla como modulo independiente.
     routine_plan = build_routine(payload.model_dump(), exercises)
     routine = Routine(
         id_users=user.id,
@@ -274,6 +287,8 @@ def recommend_routine(payload: ProfileInput, db: Session = Depends(get_db)) -> R
     db.add(routine)
     db.flush()
 
+    # Se persiste cada ejercicio recomendado con sus series, repeticiones,
+    # descanso y calorias para congelar la rutina generada en ese momento.
     exercise_map = {exercise.id: exercise for exercise in exercises}
     for item in routine_plan["exercises"]:
         db.add(
@@ -318,6 +333,8 @@ def save_activity(payload: ActivityInput, db: Session = Depends(get_db)) -> Acti
     db.add(log)
     db.flush()
 
+    # Las calorias se recalculan con el peso indicado al registrar la actividad,
+    # porque puede no coincidir con el peso guardado en el perfil original.
     response_entries = []
     for entry in payload.entries:
         exercise = exercise_map[entry.exercise_id]
@@ -377,6 +394,8 @@ def history(username: str = "", email: str | None = None, db: Session = Depends(
     if not user:
         return {"routines": [], "activities": []}
 
+    # Se limita el historial para mantener la pantalla rapida y enfocada en los
+    # ultimos registros de la demo.
     routines = (
         db.execute(select(Routine).where(Routine.id_users == user.id).order_by(Routine.created_at.desc()).limit(5))
         .scalars()

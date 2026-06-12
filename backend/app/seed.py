@@ -9,6 +9,7 @@ from .recommender import OBJECTIVES, equipment_environment, estimate_met
 
 
 def seed_objectives(db: Session) -> None:
+    """Carga los objetivos base usados por el formulario y el recomendador."""
     existing = {row[0] for row in db.execute(select(Objective.objective_name)).all()}
     for key, config in OBJECTIVES.items():
         if key not in existing:
@@ -25,6 +26,8 @@ def seed_exercises(db: Session, dataset_path: Path) -> int:
     if not dataset_path.exists():
         return 0
 
+    # Si ya existe al menos un ejercicio, no se reimporta el JSON. Asi se evita
+    # duplicar datos cada vez que se arranca la API durante la demo.
     existing_count = db.execute(select(Exercise.id).limit(1)).first()
     if existing_count:
         return 0
@@ -35,6 +38,8 @@ def seed_exercises(db: Session, dataset_path: Path) -> int:
     rows = []
     for item in exercises:
         instructions = item.get("instructions") or {}
+        # El dataset puede traer instrucciones como diccionario por idioma o
+        # como texto plano. Se normaliza a una cadena para guardarla en SQLite.
         if isinstance(instructions, dict):
             instructions_text = instructions.get("en") or next(iter(instructions.values()), "")
         else:
@@ -53,6 +58,8 @@ def seed_exercises(db: Session, dataset_path: Path) -> int:
                 instructions=instructions_text,
                 image=item.get("image"),
                 gif_url=item.get("gif_url"),
+                # MET y entorno son campos derivados para que el catalogo pueda
+                # recomendar y filtrar sin recalcularlo en cada peticion.
                 met_estimate=estimate_met(item.get("category"), item.get("equipment"), item.get("target")),
                 environment_tags=equipment_environment(item.get("equipment") or ""),
             )

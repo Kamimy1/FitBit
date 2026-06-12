@@ -33,6 +33,8 @@ class Objective(Base):
 class Profile(Base):
     __tablename__ = "p_profile"
 
+    # Un usuario puede tener varios perfiles en el tiempo. Cada rutina guarda el
+    # perfil usado para que la recomendacion siga siendo trazable.
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     id_users: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     id_objective: Mapped[int | None] = mapped_column(ForeignKey("objective.id"), nullable=True)
@@ -72,6 +74,8 @@ class UserHealth(Base):
 class Exercise(Base):
     __tablename__ = "exercises"
 
+    # Catalogo importado del JSON original, enriquecido con MET estimado y tags
+    # de entorno para filtrar/recomendar sin depender del archivo fuente.
     id: Mapped[str] = mapped_column(String(16), primary_key=True)
     name: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
     category: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
@@ -92,6 +96,8 @@ class Exercise(Base):
 class Routine(Base):
     __tablename__ = "routines"
 
+    # Cabecera de una recomendacion generada. Los ejercicios concretos se
+    # guardan aparte para conservar orden, volumen y calorias.
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     id_users: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     objective: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -133,6 +139,8 @@ class RoutineExercise(Base):
 class WorkoutLog(Base):
     __tablename__ = "historial_rutinas"
 
+    # Actividades completadas por el usuario. No sustituyen a la rutina: sirven
+    # para medir lo que realmente se ha registrado.
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     id_users: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     total_minutes: Mapped[int] = mapped_column(Integer, nullable=False)

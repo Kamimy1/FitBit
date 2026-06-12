@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Any
 
 
+# Equipamiento considerado viable en casa. Tambien se permite en gimnasio,
+# porque no limita al usuario a una ubicacion concreta.
 HOME_EQUIPMENT = {
     "body weight",
     "band",
@@ -19,6 +21,7 @@ HOME_EQUIPMENT = {
     "weighted",
 }
 
+# Pistas de equipamiento que normalmente requieren gimnasio o maquinas.
 GYM_ONLY_HINTS = {
     "cable",
     "barbell",
@@ -31,6 +34,9 @@ GYM_ONLY_HINTS = {
     "rope",
 }
 
+# Configuracion principal del recomendador. Cada objetivo define que grupos
+# musculares, categorias y material tienen prioridad, ademas del volumen
+# recomendado por nivel.
 OBJECTIVES: dict[str, dict[str, Any]] = {
     "fuerza": {
         "label": "Fuerza",
@@ -104,6 +110,7 @@ class ExerciseCandidate:
 
 
 def normalize(value: str | None) -> str:
+    """Normaliza texto libre para comparar datos del formulario y del dataset."""
     value = value or ""
     value = unicodedata.normalize("NFKD", value)
     value = "".join(char for char in value if not unicodedata.combining(char))
@@ -130,6 +137,7 @@ def resolve_environment(value: str | None) -> str:
 
 
 def equipment_environment(equipment: str) -> str:
+    """Clasifica el ejercicio segun el entorno donde se puede realizar."""
     equipment = normalize(equipment)
     if equipment in HOME_EQUIPMENT:
         return "home,gym"
@@ -139,6 +147,11 @@ def equipment_environment(equipment: str) -> str:
 
 
 def estimate_met(category: str, equipment: str, target: str) -> float:
+    """Estima MET cuando el dataset no trae una medida energetica directa.
+
+    El valor no pretende ser clinico: sirve para ordenar ejercicios y calcular
+    calorias de forma coherente dentro del MVP.
+    """
     category = normalize(category)
     equipment = normalize(equipment)
     target = normalize(target)
@@ -170,10 +183,12 @@ def estimate_met(category: str, equipment: str, target: str) -> float:
 
 
 def calories_from_met(met: float, weight_kg: float, minutes: int) -> float:
+    """Formula estandar de gasto calorico basada en MET, peso y duracion."""
     return round((met * 3.5 * weight_kg / 200) * minutes, 1)
 
 
 def candidate_from_model(exercise: Any) -> ExerciseCandidate:
+    """Convierte el modelo SQLAlchemy a un objeto ligero para puntuarlo."""
     secondary = exercise.secondary_muscles
     if isinstance(secondary, str):
         try:
@@ -200,6 +215,8 @@ def score_exercise(exercise: ExerciseCandidate, objective: str, level: str, envi
     config = OBJECTIVES[objective]
     score = 0.0
 
+    # La puntuacion combina coincidencia con objetivo, musculo, material,
+    # entorno y nivel. Asi la recomendacion es trazable y facil de justificar.
     if exercise.category in config["categories"]:
         score += 35
     if exercise.target in config["targets"]:
@@ -211,11 +228,13 @@ def score_exercise(exercise: ExerciseCandidate, objective: str, level: str, envi
 
     env_tags = equipment_environment(exercise.equipment)
     if environment == "casa":
+        # En casa se descartan ejercicios que requieran gimnasio.
         if "home" not in env_tags:
             return -1000
         if exercise.equipment in {"body weight", "band", "resistance band"}:
             score += 12
     elif environment == "ambos":
+        # "Ambos" prioriza ejercicios flexibles que valgan en casa y gimnasio.
         if env_tags != "home,gym":
             return -1000
         if exercise.equipment in {"body weight", "band", "resistance band", "dumbbell", "kettlebell"}:
@@ -227,6 +246,8 @@ def score_exercise(exercise: ExerciseCandidate, objective: str, level: str, envi
             score += 8
 
     if level == "principiante":
+        # Para principiantes se premia material simple y se penalizan maquinas
+        # o cargas que pueden requerir mas tecnica.
         if exercise.equipment in {"body weight", "band", "resistance band", "dumbbell"}:
             score += 14
         if exercise.equipment in {"barbell", "smith machine", "sled machine"}:
@@ -253,6 +274,7 @@ def target_exercise_count(minutes: int) -> int:
 
 
 def build_routine(profile: dict[str, Any], exercises: list[Any]) -> dict[str, Any]:
+    """Genera una rutina personalizada y explicable a partir del perfil."""
     objective = resolve_objective(profile.get("objective"))
     level = resolve_level(profile.get("level"))
     environment = resolve_environment(profile.get("environment"))
@@ -273,6 +295,7 @@ def build_routine(profile: dict[str, Any], exercises: list[Any]) -> dict[str, An
     category_counter: dict[str, int] = {}
     target_counter: dict[str, int] = {}
 
+    # Seleccion principal: evita que la rutina se llene del mismo grupo muscular.
     for candidate in ranked:
         if score_exercise(candidate, objective, level, environment) < 0:
             continue
@@ -288,6 +311,8 @@ def build_routine(profile: dict[str, Any], exercises: list[Any]) -> dict[str, An
             break
 
     if len(selected) < count:
+        # Si los limites de variedad dejan huecos, se rellenan con los mejores
+        # candidatos restantes que sigan siendo validos para el entorno.
         already = {exercise.id for exercise in selected}
         for candidate in ranked:
             if candidate.id not in already and score_exercise(candidate, objective, level, environment) >= 0:
@@ -299,6 +324,8 @@ def build_routine(profile: dict[str, Any], exercises: list[Any]) -> dict[str, An
     routine_items = []
     total_calories = 0.0
     for index, exercise in enumerate(selected, start=1):
+        # Cada ejercicio recibe volumen y descanso segun objetivo/nivel, no de
+        # forma fija, para que la salida parezca una rutina real.
         item_calories = calories_from_met(exercise.met_estimate, weight, minutes_per_exercise)
         total_calories += item_calories
         routine_items.append(

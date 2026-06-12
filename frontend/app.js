@@ -1,4 +1,6 @@
 const state = {
+  // Estado compartido de la pantalla. Se mantiene en memoria porque el MVP no
+  // necesita framework ni almacenamiento cliente para la demo.
   options: null,
   exerciseFilters: null,
   users: [],
@@ -7,6 +9,8 @@ const state = {
   catalogLimit: 30,
   catalogTotal: 0,
   activity: [],
+  // Evita pintar una respuesta antigua si el usuario cambia de perfil mientras
+  // se esta cargando el historial.
   historyRequestId: 0,
 };
 
@@ -225,6 +229,7 @@ async function init() {
 }
 
 async function api(path, options = {}) {
+  // Envoltorio unico para que todos los errores de la API se muestren igual.
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json" },
     ...options,
@@ -349,6 +354,8 @@ function fillFilterSelect(select, placeholder, values) {
 }
 
 async function loadExercises({ append = false } = {}) {
+  // Los filtros se mandan como query params para que backend y frontend usen la
+  // misma fuente de verdad sobre catalogo, paginacion y ordenacion.
   const params = new URLSearchParams();
   const query = els.exerciseSearch.value.trim();
   if (query) params.set("query", query);
@@ -534,6 +541,8 @@ function renderActivity() {
 }
 
 async function loadHistory() {
+  // Cada peticion recibe un id incremental; si llega tarde, se descarta para no
+  // mezclar historiales entre usuarios.
   const requestId = ++state.historyRequestId;
   const username = getActiveUsername();
   if (!username) {
@@ -582,6 +591,8 @@ function resetHistoryDetail(meta = "Selecciona un registro") {
 }
 
 function renderHistory(items, type) {
+  // La misma plantilla sirve para rutinas y actividades; cambia el texto segun
+  // el tipo de registro.
   if (!items.length) return `<div class="empty-state">Sin registros.</div>`;
   return items
     .map((item) => {
@@ -716,6 +727,8 @@ function trimText(text, maxLength) {
 }
 
 function escapeHtml(value) {
+  // Las tarjetas se construyen con strings HTML, por eso se escapan datos del
+  // dataset y del formulario antes de insertarlos.
   return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")

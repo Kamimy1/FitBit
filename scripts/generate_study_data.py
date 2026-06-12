@@ -26,6 +26,8 @@ from backend.app.recommender import build_routine, calories_from_met  # noqa: E4
 from scripts.import_survey_users import ensure_objectives, import_row, read_rows  # noqa: E402
 
 
+# Marca usada para diferenciar datos sinteticos de estudio frente a datos
+# creados manualmente desde la interfaz.
 SOURCE = "survey_eda_v1"
 REPORT_PATH = ROOT_DIR / "data" / "processed" / "study_generation_report.md"
 SUMMARY_PATH = ROOT_DIR / "data" / "processed" / "study_activity_summary.csv"
@@ -69,12 +71,14 @@ def main() -> None:
 
 
 def import_survey_profiles(db, rows: list[dict[str, str]]) -> None:
+    """Asegura que cada participante anonimizado exista como usuario."""
     for row in rows:
         import_row(db, row)
     db.flush()
 
 
 def delete_previous_generated_data(db) -> None:
+    """Elimina solo datos generados por este script para poder repetir el EDA."""
     survey_users = db.execute(select(User).where(User.username.like("survey_%"))).scalars().all()
     survey_user_ids = [user.id for user in survey_users]
     if not survey_user_ids:
@@ -108,6 +112,7 @@ def delete_previous_generated_data(db) -> None:
 
 
 def generate_user_data(db, row: dict[str, str], exercises: list[Exercise]) -> dict[str, object]:
+    """Crea una rutina y varias actividades simuladas para un participante."""
     username = row["username"]
     user = db.execute(select(User).where(User.username == username)).scalar_one()
     profile = latest_profile(db, user.id)
@@ -166,6 +171,11 @@ def latest_profile(db, user_id: int) -> Profile:
 
 
 def derive_training_profile(row: dict[str, str]) -> dict[str, object]:
+    """Deriva tiempo, dias, entorno y adherencia a partir del perfil limpio.
+
+    La encuesta no recoge todas las variables que necesita el MVP, por eso se
+    usan reglas simples y explicables basadas en edad, objetivo, nivel y salud.
+    """
     level = row.get("level") or "principiante"
     objective = row.get("objective") or "mantenimiento"
     diseases = disease_count(row)
@@ -232,6 +242,7 @@ def create_routine(
     exercises: list[Exercise],
     derived: dict[str, object],
 ) -> Routine:
+    """Guarda una rutina generada por el recomendador para el usuario."""
     profile_payload = {
         "username": user.username,
         "email": user.email,
@@ -301,6 +312,9 @@ def create_activity_logs(
     routine: Routine,
     derived: dict[str, object],
 ) -> tuple[int, int, int, float]:
+    """Simula seis semanas de entrenamientos con adherencia variable."""
+    # La semilla por participante hace que el resultado sea reproducible aunque
+    # incluya aleatoriedad en dias, duracion y ejercicios realizados.
     rng = random.Random(row["participant_id"])
     created = 0
     exercise_rows = 0
@@ -317,6 +331,8 @@ def create_activity_logs(
             if rng.random() > adherence:
                 continue
 
+            # Las sesiones se colocan por la tarde para que el historial parezca
+            # natural sin depender de datos personales reales.
             session_at = week_start + timedelta(days=weekday, hours=18 + rng.randint(0, 2), minutes=rng.choice([0, 15, 30, 45]))
             selected_items = select_session_exercises(list(routine.exercises), rng, row.get("objective", "mantenimiento"))
             log = WorkoutLog(
@@ -365,6 +381,7 @@ def create_activity_logs(
 
 
 def planned_weekdays(planned_days: int, rng: random.Random) -> list[int]:
+    """Devuelve una distribucion semanal razonable para los dias de entreno."""
     presets = {
         2: [1, 4],
         3: [0, 2, 4],
@@ -378,6 +395,7 @@ def planned_weekdays(planned_days: int, rng: random.Random) -> list[int]:
 
 
 def select_session_exercises(items: list[RoutineExercise], rng: random.Random, objective: str) -> list[RoutineExercise]:
+    """Selecciona parte de la rutina para simular sesiones no siempre perfectas."""
     minimum = 3 if objective == "mantenimiento" else 4
     maximum = min(len(items), 6 if objective == "perdida_grasa" else 5)
     count = rng.randint(min(minimum, maximum), maximum)

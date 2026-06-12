@@ -16,6 +16,8 @@ REPORT_OUTPUT = PROCESSED_DIR / "survey_cleaning_report.md"
 TODAY = date(2026, 6, 3)
 
 
+# Campos publicos: no incluyen fecha exacta de nacimiento, nombres reales ni
+# texto sanitario libre.
 PUBLIC_FIELDS = [
     "participant_id",
     "username",
@@ -35,6 +37,8 @@ PUBLIC_FIELDS = [
     "quality_notes",
 ]
 
+# Campos sensibles para trazabilidad local. El directorio data/private esta
+# ignorado por Git para no subir informacion personal.
 PRIVATE_FIELDS = PUBLIC_FIELDS + [
     "birthdate",
     "age",
@@ -51,6 +55,8 @@ PRIVATE_FIELDS = PUBLIC_FIELDS + [
     "medication_raw",
 ]
 
+# Identidades ficticias para anonimizar participantes manteniendo el dataset
+# legible durante la demo.
 FAKE_FIRST_NAMES_BY_GENDER = {
     "hombre": [
         "Hugo",
@@ -182,6 +188,8 @@ def main() -> None:
     public_rows = []
     private_rows = []
 
+    # Cada respuesta genera una version publica anonimizada y una version local
+    # sensible para auditoria, que no se sube al repositorio.
     for index, row in enumerate(rows, start=1):
         cleaned = clean_row(row, index)
         public_rows.append({field: cleaned[field] for field in PUBLIC_FIELDS})
@@ -205,6 +213,7 @@ def read_source() -> list[dict[str, str]]:
 
 
 def clean_row(row: dict[str, str], index: int) -> dict[str, str]:
+    """Normaliza una respuesta de encuesta y separa datos publicos/sensibles."""
     notes = []
     birthdate, age, birth_note = clean_birthdate(value(row, "Cumpleaños"))
     if birth_note:
@@ -229,6 +238,8 @@ def clean_row(row: dict[str, str], index: int) -> dict[str, str]:
 
     username = f"survey_{index:03d}"
     gender = clean_gender(value(row, "Género"))
+    # La identidad real se conserva solo en el CSV privado; el dataset publico
+    # usa nombres ficticios y un identificador P001, P002, etc.
     first_name, last_name = fake_identity(index, gender)
     original_first_name = clean_name(value(row, "Nombre"))
     original_last_name = clean_name(value(row, "Apellidos"))
@@ -343,6 +354,7 @@ def clean_level(text: str) -> str:
 
 
 def clean_objective(text: str) -> str:
+    """Agrupa respuestas libres de objetivo en las categorias del recomendador."""
     key = normalize_key(text)
     if any(token in key for token in ["perder", "peder", "peso"]):
         return "perdida_grasa"
@@ -358,6 +370,7 @@ def is_none_text(text: str) -> bool:
 
 
 def clean_diseases(text: str) -> list[str]:
+    """Reduce texto sanitario libre a categorias publicables."""
     if is_none_text(text):
         return []
 
@@ -371,6 +384,7 @@ def clean_diseases(text: str) -> list[str]:
 
 
 def clean_medication(text: str) -> str:
+    """Estandariza medicacion sin exponer nombres o explicaciones completas."""
     if is_none_text(text):
         return ""
 
@@ -421,6 +435,7 @@ def write_csv(path: Path, fields: list[str], rows: list[dict[str, str]]) -> None
 
 
 def write_report(raw_rows: list[dict[str, str]], public_rows: list[dict[str, str]], private_rows: list[dict[str, str]]) -> None:
+    """Genera un informe breve para justificar las reglas de limpieza."""
     objectives = Counter(row["objective"] for row in public_rows)
     levels = Counter(row["level"] for row in public_rows)
     genders = Counter(row["gender"] for row in public_rows)
