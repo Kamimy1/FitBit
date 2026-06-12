@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FitBit TFM</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">FG</span>
+          <div>
+            <strong>FitBit</strong>
+            <small>TFM Fitness</small>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="Secciones">
+          <button class="nav-tab is-active" data-section="routine">Rutina</button>
+          <button class="nav-tab" data-section="activity">Actividad</button>
+          <button class="nav-tab" data-section="history">Historial</button>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Aplicación web de generación de rutinas</p>
+            <h1>FitBit</h1>
+          </div>
+          <div class="api-state" id="apiState">API pendiente</div>
+        </header>
+
+        <section class="section is-visible" id="routine">
+          <div class="grid grid-routine">
+            <form class="panel profile-panel" id="profileForm">
+              <div class="panel-heading">
+                <h2>Perfil</h2>
+              </div>
+
+              <div class="form-grid">
+                <label class="full-span">
+                  Usuario guardado
+                  <select id="userSelect"></select>
+                </label>
+                <label>
+                  Usuario
+                  <input name="username" placeholder="Escribe usuario" maxlength="80" required />
+                </label>
+                <label>
+                  Email
+                  <input name="email" type="email" placeholder="correo@ejemplo.com" />
+                </label>
+                <label>
+                  Nombre
+                  <input name="name" placeholder="Escribe nombre" maxlength="80" />
+                </label>
+                <label>
+                  Provincia
+                  <select name="province" id="provinceSelect"></select>
+                </label>
+                <label>
+                  Objetivo
+                  <select name="objective" id="objectiveSelect"></select>
+                </label>
+                <label>
+                  Nivel
+                  <select name="level" id="levelSelect"></select>
+                </label>
+                <label>
+                  Entorno
+                  <select name="environment" id="environmentSelect"></select>
+                </label>
+                <label>
+                  Días/semana
+                  <input name="training_days" type="number" value="3" min="1" max="7" />
+                </label>
+                <label>
+                  Peso (kg)
+                  <input name="weight" type="number" value="70" min="35" max="220" step="0.1" />
+                </label>
+                <label>
+                  Altura (cm)
+                  <input name="height" type="number" value="170" min="120" max="230" step="0.1" />
+                </label>
+              </div>
+
+              <label class="range-field range-with-value">
+                <span>
+                  Tiempo disponible
+                  <strong id="minutesLabel">45 min</strong>
+                </span>
+                <input id="minutesRange" name="available_minutes" type="range" value="45" min="15" max="120" step="5" />
+              </label>
+
+              <button class="primary-action" type="submit">Generar rutina</button>
+            </form>
+
+            <div class="panel result-panel">
+              <div class="panel-heading">
+                <h2>Rutina recomendada</h2>
+                <button class="ghost-action" id="reloadHistory" type="button">Actualizar</button>
+              </div>
+
+              <div class="routine-summary" id="routineSummary">
+                <div>
+                  <strong>0</strong>
+                  <span>ejercicios</span>
+                </div>
+                <div>
+                  <strong>0</strong>
+                  <span>minutos</span>
+                </div>
+                <div>
+                  <strong>0</strong>
+                  <span>kcal</span>
+                </div>
+              </div>
+
+              <div class="empty-state" id="routineEmpty">Genera una rutina para ver resultados.</div>
+              <div class="exercise-list" id="routineList"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="activity">
+          <div class="grid grid-activity">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Registro manual</h2>
+                <span id="activityTotal">0 kcal</span>
+              </div>
+
+              <div class="activity-controls">
+                <label>
+                  Ejercicio
+                  <select id="exerciseSelect"></select>
+                </label>
+                <label>
+                  Minutos
+                  <input id="activityMinutes" type="number" value="10" min="1" max="240" />
+                </label>
+                <button class="secondary-action" id="addActivity" type="button">Añadir</button>
+              </div>
+
+              <div class="activity-list" id="activityList"></div>
+              <button class="primary-action" id="saveActivity" type="button">Guardar actividad</button>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Catálogo</h2>
+                <span id="catalogCount">0 ejercicios</span>
+              </div>
+              <div class="filter-panel">
+                <label class="filter-search">
+                  Buscar ejercicio
+                  <input id="exerciseSearch" type="search" placeholder="sentadilla, cardio, biceps..." />
+                </label>
+                <label>
+                  Dónde entrenar
+                  <select id="catalogEnvironmentFilter"></select>
+                </label>
+                <label>
+                  Grupo
+                  <select id="categoryFilter"></select>
+                </label>
+                <label>
+                  Músculo
+                  <select id="targetFilter"></select>
+                </label>
+                <label>
+                  Equipamiento
+                  <select id="equipmentFilter"></select>
+                </label>
+                <label>
+                  Orden
+                  <select id="sortFilter">
+                    <option value="name">Nombre A-Z</option>
+                    <option value="calories_desc">Más intensidad</option>
+                    <option value="calories_asc">Menos intensidad</option>
+                    <option value="category">Grupo</option>
+                    <option value="equipment">Equipamiento</option>
+                  </select>
+                </label>
+                <button class="ghost-action clear-filters" id="clearFilters" type="button">Limpiar</button>
+              </div>
+              <div class="filter-chips" id="filterChips"></div>
+              <div class="catalog-grid" id="catalogGrid"></div>
+              <button class="ghost-action catalog-more" id="loadMoreExercises" type="button">Ver más</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="history">
+          <div class="grid grid-history">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Rutinas recientes</h2>
+              </div>
+              <div class="history-list" id="routineHistory"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Actividad reciente</h2>
+              </div>
+              <div class="history-list" id="activityHistory"></div>
+            </div>
+            <div class="panel history-detail-panel">
+              <div class="panel-heading">
+                <h2 id="historyDetailTitle">Detalle</h2>
+                <span id="historyDetailMeta">Selecciona un registro</span>
+              </div>
+              <div class="empty-state" id="historyDetailEmpty">Haz clic en una rutina o actividad para ver su contenido.</div>
+              <div class="history-detail" id="historyDetail"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
